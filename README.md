@@ -130,16 +130,6 @@ wix --version
 </build>
 ```
 
-- Gradle:
-
-```Groovy
-dependencies {
-    implementation group: 'io.github.lxwise', name: 'fx-updater', version: '1.0.1'
-}
-```
-
-
-
 ### 2.打包
 
 执行`mvn clean jfx:package`
