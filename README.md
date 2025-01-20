@@ -130,6 +130,14 @@ wix --version
 </build>
 ```
 
+- Gradle:
+
+```groovy
+implementation group: 'io.github.lxwise', name: 'jfx-maven-plugin', version: '1.0.0'
+```
+
+
+
 ### 2.打包
 
 执行`mvn clean jfx:package`

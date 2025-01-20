@@ -82,7 +82,7 @@
   </dependencies>
 
   <build>
-    <finalName>javafx-maven-plugin</finalName>
+    <finalName>jfx-maven-plugin</finalName>
     <plugins>
 
       <plugin>
