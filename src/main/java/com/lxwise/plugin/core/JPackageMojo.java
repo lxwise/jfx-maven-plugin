@@ -16,667 +16,606 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
+ * JavaFX 应用打包 Maven 插件核心 Mojo。
+ * <p>
+ * 基于 JDK 内置的 {@code jpackage} 工具，将 JavaFX 应用程序打包为各平台原生安装包。
+ * 支持 Windows（exe、msi）、macOS（pkg、dmg）和 Linux（rpm、deb）等格式。
+ * </p>
+ * <p>
+ * 使用方式：在 Maven 中执行 {@code mvn jfx:package} 目标即可触发打包流程。
+ * 插件会自动收集项目依赖、构建 jpackage 命令行参数并执行打包。
+ * </p>
+ *
  * @author lxwise
- * @create 2024-09
- * @description: 打包核心类
- * @version: 1.0
- * @email: lstart980@gmail.com
+ * @version 1.0
+ * @since 2024-09
  */
 @Mojo(name = "package", requiresDependencyResolution = ResolutionScope.RUNTIME)
 @Execute(phase = LifecyclePhase.PACKAGE)
 public class JPackageMojo extends AbstractMojo {
 
-    /**
-     * 项目
-     */
+    // ==================== Maven 注入参数 ====================
+
+    /** Maven 项目对象，由框架自动注入 */
     @Parameter(defaultValue = "${project}")
     private MavenProject project;
 
-    /**
-     * 工作目录
-     */
-    private String workDirectory;
-    /**
-     * 资源目录
-     */
-    private String resourceDirectory;
+    // ==================== 核心配置参数 ====================
 
-    /**
-     * 运行文件入口类
-     */
+    /** 应用程序入口类的全限定名（必填） */
     @Parameter(required = true)
     private String mainClass;
 
     /**
-     * 主jar
-     */
-    private String mainJar;
-    /**
-     * image 路径
+     * 预构建的运行时镜像路径。
+     * <p>若指定此参数，将使用 {@code --runtime-image} 模式打包，跳过依赖复制步骤。</p>
      */
     @Parameter
     private String imagePath;
 
-    /**
-     * 传递给｛@code可执行文件｝的vm选项列表。
-     */
+    /** 传递给应用程序 JVM 的选项列表，如 {@code -Xmx512m} */
     @Parameter
     private List<String> options;
 
-    /**
-     * 为执行的程序用空格分隔的参数。数组
-     */
+    /** 传递给应用程序主类的命令行参数列表 */
     @Parameter
     private List<String> arguments;
 
+    // ==================== 通用打包配置 ====================
+
     /**
-     * 类型
-     * {"app-image", "exe", "msi", "rpm", "deb", "pkg", "dmg"}
+     * 打包输出类型。
+     * <p>可选值：{@code app-image}、{@code exe}、{@code msi}、{@code rpm}、{@code deb}、{@code pkg}、{@code dmg}</p>
      */
     @Parameter
     private String type;
-    /**
-     * 版本
-     */
+
+    /** 应用程序版本号，默认使用 Maven 项目版本 */
     @Parameter(defaultValue = "${project.version}")
     private String version;
-    /**
-     * 版权
-     */
+
+    /** 版权信息 */
     @Parameter
     private String copyright;
 
-    /**
-     * 描述
-     */
+    /** 应用程序描述 */
     @Parameter
     private String description;
 
-    /**
-     * 图标
-     */
+    /** 应用程序图标路径（支持绝对路径或相对于项目根目录的相对路径） */
     @Parameter
     private String icon;
 
-    /**
-     * 应用名称
-     */
+    /** 应用程序名称，默认使用 Maven 项目名称 */
     @Parameter
     private String name;
-    /**
-     * 厂商
-     */
+
+    /** 应用程序厂商/供应商名称 */
     @Parameter
     private String vendor;
-    /**
-     * 启用详细输出
-     */
+
+    /** 是否启用 jpackage 详细输出，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean verbose;
 
-    /**
-     * MAC 软件包标识符
-     */
-    @Parameter
-    private String macPackageIdentifier;
-    /**
-     * MAC 软件包名称
-     * 显示在菜单栏中的应用程序的名称,可能与应用程序名称不同。此名称的长度必须小于16个字符，并且适合在菜单栏和应用程序信息窗口中显示。默认为应用程序名称。
-     */
-    @Parameter
-    private String macPackageName;
-    /**
-     * MAC 软件包签名前缀
-     */
-    @Parameter
-    private String macPackageSigningPrefix;
-    /**
-     * MAC 标志
-     */
-    @Parameter
-    private String macSign;
-    /**
-     * Mac 签名钥匙串
-     */
-    @Parameter
-    private String macSigningKeychain;
-    /**
-     * Mac 签名钥匙串
-     */
-    @Parameter
-    private String macSigningKeyUserName;
-    /**
-     * Mac 应用商店
-     */
-    @Parameter(defaultValue = "false")
-    private Boolean macAppStore;
-    /**
-     * Mac 权利
-     */
-    @Parameter
-    private String macEntitlements;
-    /**
-     * Mac 应用类别
-     */
-    @Parameter
-    private String macAppCategory;
-
-    /**
-     * 关于网址
-     */
+    /** 应用程序相关信息的 URL */
     @Parameter
     private String aboutUrl;
 
-    /**
-     * 目录的绝对路径
-     */
+    /** 安装目录的绝对路径 */
     @Parameter
     private String installDir;
 
+    // ==================== macOS 专属配置 ====================
+
+    /** macOS 软件包标识符（如 {@code com.example.app}） */
+    @Parameter
+    private String macPackageIdentifier;
+
     /**
-     * 为应用程序创建控制台启动器，应指定需要控制台交互的应用程序
+     * macOS 菜单栏中显示的应用名称。
+     * <p>长度必须小于 16 个字符，默认使用应用名称。</p>
      */
+    @Parameter
+    private String macPackageName;
+
+    /** macOS 软件包签名前缀 */
+    @Parameter
+    private String macPackageSigningPrefix;
+
+    /** macOS 签名标志 */
+    @Parameter
+    private String macSign;
+
+    /** macOS 签名钥匙串路径 */
+    @Parameter
+    private String macSigningKeychain;
+
+    /** macOS 签名密钥用户名 */
+    @Parameter
+    private String macSigningKeyUserName;
+
+    /** 是否面向 Mac App Store 发布，默认 {@code false} */
+    @Parameter(defaultValue = "false")
+    private Boolean macAppStore;
+
+    /** macOS 权利文件路径（.entitlements 文件） */
+    @Parameter
+    private String macEntitlements;
+
+    /** macOS 应用类别（如 {@code public.app-category.developer-tools}） */
+    @Parameter
+    private String macAppCategory;
+
+    // ==================== Windows 专属配置 ====================
+
+    /** 是否创建控制台启动器（适用于需要控制台交互的应用），默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winConsole;
 
-    /**
-     * 添加对话框，以便用户选择安装产品的目录
-     */
+    /** 安装时是否允许用户选择安装目录，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winDirChooser;
 
-    /**
-     * 用户可以获取更多信息或技术支持的URL
-     */
+    /** 帮助/技术支持页面的 URL */
     @Parameter
     private String winHelpUrl;
 
-    /**
-     * 请求为此应用程序添加开始菜单快捷方式
-     */
+    /** 是否添加开始菜单快捷方式，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winMenu;
 
-    /**
-     * 将此应用程序放置在的开始菜单组
-     */
+    /** 开始菜单中的分组名称 */
     @Parameter
     private String winMenuGroup;
 
-    /**
-     * 请求按用户安装
-     */
+    /** 是否按用户安装（非系统级），默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winPerUserInstall;
 
-    /**
-     * 请求为此应用程序创建桌面快捷方式
-     */
+    /** 是否创建桌面快捷方式，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winShortcut;
 
-    /**
-     * 添加对话框，以便用户选择是否由安装程序创建快捷方式
-     */
+    /** 安装时是否弹出快捷方式创建确认对话框，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean winShortcutPrompt;
 
-    /**
-     * 用应用程序更新信息的URL
-     */
+    /** 应用程序更新信息的 URL */
     @Parameter
     private String winUpdateUrl;
 
-    /**
-     * 与此软件包升级相关联的UUID
-     */
+    /** 与 MSI 升级关联的 UUID */
     @Parameter
     private String winUpgradeUuid;
-    /**
-     * Linux软件包的名称,默认为应用程序名称
-     */
+
+    // ==================== Linux 专属配置 ====================
+
+    /** Linux 软件包名称，默认使用应用名称 */
     @Parameter
     private String linuxPackageName;
-    /**
-     * .deb包的维护者 email-address
-     */
+
+    /** .deb 软件包的维护者邮箱地址 */
     @Parameter
     private String linuxDebMaintainer;
-    /**
-     * 将此应用程序放置在的菜单组
-     */
+
+    /** Linux 菜单组名称 */
     @Parameter
     private String linuxMenuGroup;
-    /**
-     * 为应用程序创建快捷方式
-     */
+
+    /** 是否为 Linux 应用创建桌面快捷方式，默认 {@code false} */
     @Parameter(defaultValue = "false")
     private Boolean linuxShortcut;
 
+    // ==================== 内部工作变量 ====================
+
+    /** 构建工作目录的绝对路径 */
+    private String workDirectory;
+
+    /** 平台相关资源目录的绝对路径 */
+    private String resourceDirectory;
+
+    /** 主 JAR 文件的路径，在依赖复制阶段自动设置 */
+    private String mainJar;
+
+    // ==================== 执行入口 ====================
+
+    /**
+     * 插件执行入口方法。
+     * <p>
+     * 执行流程：
+     * <ol>
+     *     <li>初始化工作目录和资源目录</li>
+     *     <li>复制项目依赖到工作目录（非 runtime-image 模式）</li>
+     *     <li>构建 jpackage 命令行</li>
+     *     <li>执行 jpackage 命令完成打包</li>
+     * </ol>
+     * </p>
+     *
+     * @throws MojoExecutionException 如果初始化或命令执行失败
+     */
     @Override
     public void execute() throws MojoExecutionException {
-        // 日志记录，表明打包任务开始执行
-        getLog().info("开始执行jfx:package...");
-        // 初始化工作目录、资源目录等相关内容
+        getLog().info("开始执行 jfx:package...");
         init();
-        // 创建一个执行器来运行命令
-        DefaultExecutor executor = new DefaultExecutor();
-        // 构建打包所需的命令
+
         CommandLine command = buildCommand();
         try {
-            // 执行命令
-            executor.execute(command);
+            new DefaultExecutor().execute(command);
         } catch (IOException e) {
-            // 如果执行失败，则抛出异常并记录错误信息
-            throw new MojoExecutionException("指令执行失败", e);
+            throw new MojoExecutionException("jpackage 指令执行失败", e);
         }
     }
 
+    // ==================== 初始化逻辑 ====================
+
     /**
-     * 初始化工作目录、资源目录等相关内容
-     * @throws MojoExecutionException
+     * 初始化打包环境：清理旧文件、创建工作目录、定位资源目录、复制依赖。
+     *
+     * @throws MojoExecutionException 如果任何初始化步骤失败
      */
     private void init() throws MojoExecutionException {
-        // 清理构建目录中已有的JavaFX相关内容
         clear();
-        // 初始化工作目录路径
-        this.workDirectory = workDirectory();
-        // 定位项目根目录下的JavaFX资源文件夹
-        File resource = new File(project.getBasedir(), CommonConstant.JAVAFX);
-        // 初始化资源目录，根据操作系统选择适配的资源路径
-        initResourceDir(resource);
-        // 如果镜像路径为空，则复制依赖库到工作目录
+        this.workDirectory = createWorkDirectory();
+        initResourceDir();
         if (StringUtils.isEmpty(imagePath)) {
             copyLibrary();
         }
     }
 
     /**
-     * 初始化资源目录，根据操作系统选择适配的资源路径
-     * @param resource
+     * 根据当前操作系统初始化平台资源目录。
+     * <p>
+     * 在项目根目录下查找 {@code javafx/} 目录，并根据当前操作系统选择对应的子目录
+     * （{@code windows/}、{@code mac/} 或 {@code linux/}）作为资源目录。
+     * </p>
      */
-    private void initResourceDir(File resource) {
-        if (resource.exists()) {
-            if (SystemUtils.IS_OS_WINDOWS) {
-                // Windows操作系统，初始化Windows资源目录
-                File windows = new File(resource, CommonConstant.WINDOWS);
-                if (windows.exists()) {
-                    resourceDirectory = windows.getAbsolutePath();
-                }
-            } else if (SystemUtils.IS_OS_MAC) {
-                // macOS操作系统，初始化Mac资源目录
-                File mac = new File(resource, CommonConstant.MAC);
-                if (mac.exists()) {
-                    resourceDirectory = mac.getAbsolutePath();
-                }
-            } else if (SystemUtils.IS_OS_LINUX) {
-                // Linux操作系统，初始化Linux资源目录
-                File linux = new File(resource, CommonConstant.LINUX);
-                if (linux.exists()) {
-                    resourceDirectory = linux.getAbsolutePath();
-                }
+    private void initResourceDir() {
+        File resource = new File(project.getBasedir(), CommonConstant.JAVAFX);
+        if (!resource.exists()) {
+            return;
+        }
+
+        String platformDir;
+        if (SystemUtils.IS_OS_WINDOWS) {
+            platformDir = CommonConstant.WINDOWS;
+        } else if (SystemUtils.IS_OS_MAC) {
+            platformDir = CommonConstant.MAC;
+        } else if (SystemUtils.IS_OS_LINUX) {
+            platformDir = CommonConstant.LINUX;
+        } else {
+            return;
+        }
+
+        File platformResource = new File(resource, platformDir);
+        if (platformResource.exists()) {
+            this.resourceDirectory = platformResource.getAbsolutePath();
+        }
+    }
+
+    // ==================== 命令构建 ====================
+
+    /**
+     * 构建完整的 jpackage 命令行。
+     *
+     * @return 解析后的 {@link CommandLine} 对象
+     */
+    private CommandLine buildCommand() {
+        List<String> command = new ArrayList<>();
+        command.add("jpackage");
+
+        // 输出目录
+        addQuotedOption(command, "--dest", workDirectory);
+
+        // 打包类型
+        addOptionIfPresent(command, "--type", type);
+
+        // 版本号
+        command.add("--app-version");
+        command.add(version);
+
+        // 通用选项
+        addQuotedOptionIfPresent(command, "--copyright", copyright);
+        addOptionIfPresent(command, "--description", description);
+
+        // 图标（需要路径校验）
+        addFileOption(command, "--icon", icon, "icon 文件不存在: ");
+
+        // 应用名称（默认使用项目名称）
+        if (StringUtils.isEmpty(name)) {
+            name = project.getName();
+        }
+        addQuotedOption(command, "--name", name);
+
+        addOptionIfPresent(command, "--vendor", vendor);
+
+        if (Boolean.TRUE.equals(verbose)) {
+            command.add("--verbose");
+        }
+
+        addOptionIfPresent(command, "--about-url", aboutUrl);
+        addQuotedOptionIfPresent(command, "--install-dir", installDir);
+        addQuotedOptionIfPresent(command, "--resource-dir", resourceDirectory);
+
+        // 输入模式：普通模式 vs runtime-image 模式
+        if (StringUtils.isEmpty(imagePath)) {
+            addQuotedOption(command, "--input", new File(workDirectory, CommonConstant.LIB).getAbsolutePath());
+            command.add("--main-class");
+            command.add(mainClass);
+            addQuotedOption(command, "--main-jar", mainJar);
+        } else {
+            File image = path(imagePath);
+            addQuotedOption(command, "--runtime-image", image.getAbsolutePath());
+            command.add("--module");
+            command.add(mainClass);
+        }
+
+        // 应用参数和 JVM 选项（仅普通模式）
+        if (StringUtils.isEmpty(imagePath)) {
+            addRepeatedOption(command, "--arguments", arguments);
+            addRepeatedQuotedOption(command, "--java-options", options);
+        }
+
+        // 平台特定选项
+        appendWindowsOptions(command);
+        appendMacOptions(command);
+        appendLinuxOptions(command);
+
+        getLog().info("执行指令: " + String.join(" ", command));
+        return CommandLine.parse(String.join(" ", command));
+    }
+
+    // ==================== 平台特定命令配置 ====================
+
+    /**
+     * 追加 Windows 平台专属的 jpackage 命令选项。
+     *
+     * @param command 命令参数列表
+     */
+    private void appendWindowsOptions(List<String> command) {
+        if (!SystemUtils.IS_OS_WINDOWS) {
+            return;
+        }
+        addFlagIfTrue(command, "--win-console", winConsole);
+        addFlagIfTrue(command, "--win-dir-chooser", winDirChooser);
+        addOptionIfPresent(command, "--win-help-url", winHelpUrl);
+        addFlagIfTrue(command, "--win-menu", winMenu);
+        addOptionIfPresent(command, "--win-menu-group", winMenuGroup);
+        addFlagIfTrue(command, "--win-per-user-install", winPerUserInstall);
+        addFlagIfTrue(command, "--win-shortcut", winShortcut);
+        addFlagIfTrue(command, "--win-shortcut-prompt", winShortcutPrompt);
+        addOptionIfPresent(command, "--win-update-url", winUpdateUrl);
+        addOptionIfPresent(command, "--win-upgrade-uuid", winUpgradeUuid);
+    }
+
+    /**
+     * 追加 macOS 平台专属的 jpackage 命令选项。
+     *
+     * @param command 命令参数列表
+     */
+    private void appendMacOptions(List<String> command) {
+        if (!SystemUtils.IS_OS_MAC) {
+            return;
+        }
+        addOptionIfPresent(command, "--mac-package-identifier", macPackageIdentifier);
+        addOptionIfPresent(command, "--mac-package-name", macPackageName);
+        addOptionIfPresent(command, "--mac-package-signing-prefix", macPackageSigningPrefix);
+        addOptionIfPresent(command, "--mac-sign", macSign);
+        addOptionIfPresent(command, "--mac-signing-keychain", macSigningKeychain);
+        addOptionIfPresent(command, "--mac-signing-key-user-name", macSigningKeyUserName);
+        addFlagIfTrue(command, "--mac-app-store", macAppStore);
+        addFileOption(command, "--mac-entitlements", macEntitlements, "mac-entitlements 文件不存在");
+        addOptionIfPresent(command, "--mac-app-category", macAppCategory);
+    }
+
+    /**
+     * 追加 Linux 平台专属的 jpackage 命令选项。
+     *
+     * @param command 命令参数列表
+     */
+    private void appendLinuxOptions(List<String> command) {
+        if (!SystemUtils.IS_OS_LINUX) {
+            return;
+        }
+        addOptionIfPresent(command, "--linux-package-name", linuxPackageName);
+        addOptionIfPresent(command, "--linux-deb-maintainer", linuxDebMaintainer);
+        addOptionIfPresent(command, "--linux-menu-group", linuxMenuGroup);
+        addFlagIfTrue(command, "--linux-shortcut", linuxShortcut);
+    }
+
+    // ==================== 命令构建辅助方法 ====================
+
+    /**
+     * 当值非空时，向命令列表添加一个选项及其值。
+     *
+     * @param command 命令参数列表
+     * @param option  选项名称（如 {@code --type}）
+     * @param value   选项值，为空时跳过
+     */
+    private void addOptionIfPresent(List<String> command, String option, String value) {
+        if (StringUtils.isNotEmpty(value)) {
+            command.add(option);
+            command.add(value);
+        }
+    }
+
+    /**
+     * 当值非空时，向命令列表添加一个选项及其带引号的值。
+     *
+     * @param command 命令参数列表
+     * @param option  选项名称
+     * @param value   选项值，为空时跳过
+     */
+    private void addQuotedOptionIfPresent(List<String> command, String option, String value) {
+        if (StringUtils.isNotEmpty(value)) {
+            addQuotedOption(command, option, value);
+        }
+    }
+
+    /**
+     * 向命令列表添加一个选项及其带引号的值（不检查空值）。
+     *
+     * @param command 命令参数列表
+     * @param option  选项名称
+     * @param value   选项值
+     */
+    private void addQuotedOption(List<String> command, String option, String value) {
+        command.add(option);
+        command.add("\"" + value + "\"");
+    }
+
+    /**
+     * 当布尔值为 {@code true} 时，向命令列表添加一个标志选项。
+     *
+     * @param command 命令参数列表
+     * @param flag    标志名称（如 {@code --verbose}）
+     * @param value   布尔值，为 {@code null} 或 {@code false} 时跳过
+     */
+    private void addFlagIfTrue(List<String> command, String flag, Boolean value) {
+        if (Boolean.TRUE.equals(value)) {
+            command.add(flag);
+        }
+    }
+
+    /**
+     * 向命令列表重复添加选项，为列表中的每个元素生成一对 {@code option value}。
+     *
+     * @param command 命令参数列表
+     * @param option  选项名称
+     * @param values  值列表，为 {@code null} 或空时跳过
+     */
+    private void addRepeatedOption(List<String> command, String option, List<String> values) {
+        if (values != null && !values.isEmpty()) {
+            for (String value : values) {
+                command.add(option);
+                command.add(value);
             }
         }
     }
 
     /**
-     * 获取项目根目录下的文件
-     * @param path
-     * @return
+     * 向命令列表重复添加带引号值的选项。
+     *
+     * @param command 命令参数列表
+     * @param option  选项名称
+     * @param values  值列表，为 {@code null} 或空时跳过
+     */
+    private void addRepeatedQuotedOption(List<String> command, String option, List<String> values) {
+        if (values != null && !values.isEmpty()) {
+            for (String value : values) {
+                command.add(option);
+                command.add("\"" + value + "\"");
+            }
+        }
+    }
+
+    /**
+     * 添加需要文件路径校验的选项。若路径无法定位则输出警告日志。
+     *
+     * @param command    命令参数列表
+     * @param option     选项名称
+     * @param filePath   配置的文件路径
+     * @param warnPrefix 文件不存在时的警告前缀
+     */
+    private void addFileOption(List<String> command, String option, String filePath, String warnPrefix) {
+        if (StringUtils.isEmpty(filePath)) {
+            return;
+        }
+        File resolved = path(filePath);
+        if (resolved != null) {
+            command.add(option);
+            command.add("\"" + resolved.getAbsolutePath() + "\"");
+        } else {
+            getLog().warn(warnPrefix + filePath);
+        }
+    }
+
+    // ==================== 文件与目录操作 ====================
+
+    /**
+     * 解析文件路径：先尝试绝对路径，再尝试相对于项目根目录的路径。
+     *
+     * @param path 文件路径（绝对或相对）
+     * @return 找到的文件对象；如果路径无效则返回 {@code null}
      */
     public File path(String path) {
-        // 首先尝试直接定位路径文件
         File result = new File(path);
         if (result.exists()) {
             return result;
         }
-        // 如果路径无效，尝试以项目根目录为基准定位文件
         result = new File(project.getBasedir(), path);
         if (result.exists()) {
             return result;
         }
-        // 如果都不存在，返回null
         return null;
     }
 
     /**
-     * 构建打包所需的命令
-     * @return
-     */
-    private CommandLine buildCommand() {
-        List<String> command = new ArrayList<>();
-        // 添加jpackage命令
-        command.add("jpackage");
-        command.add("--dest");
-        command.add("\"" + workDirectory + "\"");
-        // 如果指定了打包类型，则添加相关选项
-        if (StringUtils.isNotEmpty(type)) {
-            command.add("--type");
-            command.add(type);
-        }
-        // 添加应用版本号
-        command.add("--app-version");
-        command.add(version);
-        // 如果指定版权，则添加相关选项
-        if (StringUtils.isNotEmpty(copyright)) {
-            command.add("--copyright");
-            command.add("\""+copyright+"\"");
-        }
-        // 添加应用描述
-        if (StringUtils.isNotEmpty(description)) {
-            command.add("--description");
-            command.add(description);
-        }
-        // 添加应用图标
-        if (StringUtils.isNotEmpty(icon)) {
-            File path = path(icon);
-            if (path != null) {
-                command.add("--icon");
-                command.add("\"" + path.getAbsolutePath() + "\"");
-            } else {
-                getLog().warn("icon文件不存在:" + icon);
-            }
-        }
-        // 添加应用名称
-        if (StringUtils.isEmpty(name)) {
-            name = project.getName();
-        }
-        command.add("--name");
-        command.add("\""+ name +"\"");
-        // 添加应用供应商
-        if (StringUtils.isNotEmpty(vendor)) {
-            command.add("--vendor");
-            command.add(vendor);
-        }
-        //启用详细输出
-        if (verbose) {
-            command.add("--verbose");
-        }
-        // 添加关于链接
-        if (StringUtils.isNotEmpty(aboutUrl)) {
-
-            command.add("--about-url");
-            command.add(aboutUrl);
-        }
-        // 安装目录
-        if (StringUtils.isNotEmpty(installDir)) {
-            command.add("--install-dir");
-            command.add("\"" + installDir + "\"");
-        }
-        // 资源目录
-        if (StringUtils.isNotEmpty(resourceDirectory)) {
-            command.add("--resource-dir");
-            command.add("\"" + resourceDirectory + "\"");
-        }
-        // 镜像路径
-        if(StringUtils.isEmpty(imagePath)){
-            command.add("--input");
-            command.add("\"" + new File(workDirectory, CommonConstant.LIB).getAbsolutePath() + "\"");
-            command.add("--main-class");
-            command.add(mainClass);
-            command.add("--main-jar");
-            command.add("\"" + mainJar + "\"");
-        }else{
-            File image=path(imagePath);
-            command.add("--runtime-image");
-            command.add("\"" + image.getAbsolutePath() + "\"");
-            command.add("--module");
-            command.add(mainClass);
-        }
-        if (StringUtils.isEmpty(imagePath) && arguments != null && !arguments.isEmpty()) {
-            for (String arg : arguments) {
-                command.add("--arguments");
-                command.add(arg);
-            }
-        }
-        if (StringUtils.isEmpty(imagePath) && options != null && !options.isEmpty()) {
-            options.forEach(option -> {
-                command.add("--java-options");
-                command.add("\"" + option + "\"");
-            });
-        }
-        windows(command);
-        mac(command);
-        linux(command);
-        getLog().info("执行指令:" + String.join(" ", command));
-        return CommandLine.parse(String.join(" ", command));
-    }
-
-    /**
-     * 配置 Linux 平台的命令选项
+     * 复制项目所有运行时依赖和主 JAR 到工作目录的 {@code lib/} 子目录。
      *
-     * @param command 要修改的命令列表
-     */
-    private void linux(List<String> command) {
-        // 检查当前系统是否是 Linux 系统
-        if (!SystemUtils.IS_OS_LINUX) {
-            return; // 如果不是 Linux 系统，直接返回
-        }
-        // 如果 Linux软件包的名称 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(linuxPackageName)) {
-            command.add("--linux-package-name");
-            command.add(linuxPackageName);
-        }
-        // 如果 deb包的维护者 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(linuxDebMaintainer)) {
-            command.add("--linux-deb-maintainer");
-            command.add(linuxDebMaintainer);
-        }
-        // 如果 菜单组 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(linuxMenuGroup)) {
-            command.add("--linux-menu-group");
-            command.add(linuxMenuGroup);
-        }
-        // 如果 快捷方式 为 true，添加相应的选项
-        if (linuxShortcut) {
-            command.add("--linux-shortcut");
-        }
-    }
-
-    /**
-     * 配置 Windows 平台的命令选项
-     *
-     * @param command 要修改的命令列表
-     */
-    private void windows(List<String> command) {
-        // 检查当前系统是否是 Windows 系统
-        if (!SystemUtils.IS_OS_WINDOWS) {
-            return; // 如果不是 Windows 系统，直接返回
-        }
-        // 如果 winConsole 为 true，添加相应的选项
-        if (winConsole) {
-            command.add("--win-console");
-        }
-        // 如果 winDirChooser 为 true，添加相应的选项
-        if (winDirChooser) {
-            command.add("--win-dir-chooser");
-        }
-        // 如果 winHelpUrl 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(winHelpUrl)) {
-            command.add("--win-help-url");
-            command.add(winHelpUrl);
-        }
-        // 如果 winMenu 为 true，添加相应的选项
-        if (winMenu) {
-            command.add("--win-menu");
-        }
-        // 如果 winMenuGroup 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(winMenuGroup)) {
-            command.add("--win-menu-group");
-            command.add(winMenuGroup);
-        }
-        // 如果 winPerUserInstall 为 true，添加相应的选项
-        if (winPerUserInstall) {
-            command.add("--win-per-user-install");
-        }
-        // 如果 winShortcut 为 true，添加相应的选项
-        if (winShortcut) {
-            command.add("--win-shortcut");
-        }
-        // 如果 winShortcutPrompt 为 true，添加相应的选项
-        if (winShortcutPrompt) {
-            command.add("--win-shortcut-prompt");
-        }
-        // 如果 winUpdateUrl 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(winUpdateUrl)) {
-            command.add("--win-update-url");
-            command.add(winUpdateUrl);
-        }
-        // 如果 winUpgradeUuid 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(winUpgradeUuid)) {
-            command.add("--win-upgrade-uuid");
-            command.add(winUpgradeUuid);
-        }
-    }
-
-    /**
-     * 配置 macOS 平台的命令选项
-     *
-     * @param command 要修改的命令列表
-     */
-    private void mac(List<String> command) {
-        // 检查当前系统是否是 macOS 系统
-        if (!SystemUtils.IS_OS_MAC) {
-            return; // 如果不是 macOS 系统，直接返回
-        }
-        // 如果 macPackageIdentifier 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macPackageIdentifier)) {
-            command.add("--mac-package-identifier");
-            command.add(macPackageIdentifier);
-        }
-        // 如果 macPackageName 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macPackageName)) {
-            command.add("--mac-package-name");
-            command.add(macPackageName);
-        }
-        // 如果 macPackageSigningPrefix 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macPackageSigningPrefix)) {
-            command.add("--mac-package-signing-prefix");
-            command.add(macPackageSigningPrefix);
-        }
-        // 如果 macSign 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macSign)) {
-            command.add("--mac-sign");
-            command.add(macSign);
-        }
-        // 如果 macSigningKeychain 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macSigningKeychain)) {
-            command.add("--mac-signing-keychain");
-            command.add(macSigningKeychain);
-        }
-        // 如果 macSigningKeyUserName 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macSigningKeyUserName)) {
-            command.add("--mac-signing-key-user-name");
-            command.add(macSigningKeyUserName);
-        }
-        // 如果 macAppStore 为 true，添加相应的选项
-        if (macAppStore) {
-            command.add("--mac-app-store");
-        }
-        // 如果 macEntitlements 非空，检查路径并添加选项
-        if (StringUtils.isNotEmpty(macEntitlements)) {
-            File path = path(macEntitlements);
-            if (path != null) {
-                command.add("--mac-entitlements");
-                command.add("\"" + path.getAbsolutePath() + "\"");
-            } else {
-                getLog().warn("mac-entitlements 文件不存在"); // 打印警告日志
-            }
-        }
-        // 如果 macAppCategory 非空，添加相应的选项
-        if (StringUtils.isNotEmpty(macAppCategory)) {
-            command.add("--mac-app-category");
-            command.add(macAppCategory);
-        }
-    }
-
-
-    /**
-     * 复制项目所需的依赖库到指定工作目录。
-     *
-     * @throws MojoExecutionException 如果文件复制失败或目录创建失败
+     * @throws MojoExecutionException 如果文件复制或目录创建失败
      */
     private void copyLibrary() throws MojoExecutionException {
-        // 创建用于存放依赖库的目录
         File lib = mkdir(workDirectory, CommonConstant.LIB);
 
-        // 获取构建输出目录和最终生成的主 JAR 文件名称
-        String directory = project.getBuild().getDirectory();
+        String buildDir = project.getBuild().getDirectory();
         String finalName = project.getBuild().getFinalName() + "." + project.getPackaging();
 
-        // 遍历项目的所有依赖并复制到目标目录
+        // 复制所有运行时依赖
         for (Artifact artifact : project.getArtifacts()) {
             File target = new File(lib, artifact.getFile().getName());
-            getLog().info("正在复制文件:[" + artifact.getFile().getName() + "]至[" + target.getAbsolutePath() + "]");
-            // 复制依赖文件到目标目录
+            getLog().info("正在复制文件: [" + artifact.getFile().getName() + "] 至 [" + target.getAbsolutePath() + "]");
             FileUtils.copy(artifact.getFile(), target);
         }
 
-        // 复制项目的主 JAR 文件到目标目录
-        File source = new File(directory, finalName);
+        // 复制主 JAR
+        File source = new File(buildDir, finalName);
         File target = new File(lib, finalName);
-        getLog().info("正在复制文件:[" + finalName + "]至[" + target.getAbsolutePath() + "]");
+        getLog().info("正在复制文件: [" + finalName + "] 至 [" + target.getAbsolutePath() + "]");
         FileUtils.copy(source, target);
 
-        // 记录主 JAR 文件的路径，供后续使用
-        mainJar = target.getAbsolutePath();
+        this.mainJar = target.getAbsolutePath();
     }
 
     /**
-     * 清理构建目录中的 JavaFX 相关文件。
+     * 清理构建输出目录中已有的 JavaFX 相关文件。
      *
      * @throws MojoExecutionException 如果删除操作失败
      */
     private void clear() throws MojoExecutionException {
-        // 定位构建目录下的 JavaFX 文件夹
-        String directory = project.getBuild().getDirectory();
-        File file = new File(directory, CommonConstant.JAVAFX);
-
-        // 删除 JavaFX 文件夹及其内容
-        FileUtils.remove(file);
+        String buildDir = project.getBuild().getDirectory();
+        FileUtils.remove(new File(buildDir, CommonConstant.JAVAFX));
     }
 
     /**
-     * 获取或创建工作目录的绝对路径。
+     * 在构建输出目录下创建 JavaFX 工作目录。
      *
      * @return 工作目录的绝对路径
      * @throws MojoExecutionException 如果目录创建失败
      */
-    public String workDirectory() throws MojoExecutionException {
-        // 定位构建输出目录并创建 JavaFX 文件夹
-        String directory = project.getBuild().getDirectory();
-        File file = mkdir(directory, CommonConstant.JAVAFX);
-
-        // 返回工作目录的绝对路径
-        return file.getAbsolutePath();
+    private String createWorkDirectory() throws MojoExecutionException {
+        String buildDir = project.getBuild().getDirectory();
+        return mkdir(buildDir, CommonConstant.JAVAFX).getAbsolutePath();
     }
 
     /**
      * 创建指定路径的目录（如果不存在）。
      *
-     * @param directory 父目录路径
-     * @param filename  子目录名称
+     * @param parentDir 父目录路径
+     * @param childName 子目录名称
      * @return 创建的目录文件对象
      * @throws MojoExecutionException 如果目录创建失败
      */
-    private File mkdir(String directory, String filename) throws MojoExecutionException {
-        // 创建目标目录文件对象
-        File file = new File(directory, filename);
-
-        // 如果目录不存在，则尝试创建
-        if (!file.exists()) {
-            getLog().info("开始创建目录:[" + file.getAbsolutePath() + "]");
-            if (!file.mkdirs()) {
-                // 创建失败抛出异常
-                throw new MojoExecutionException("创建目录:[" + file.getAbsolutePath() + "]失败");
+    private File mkdir(String parentDir, String childName) throws MojoExecutionException {
+        File dir = new File(parentDir, childName);
+        if (!dir.exists()) {
+            getLog().info("开始创建目录: [" + dir.getAbsolutePath() + "]");
+            if (!dir.mkdirs()) {
+                throw new MojoExecutionException("创建目录失败: [" + dir.getAbsolutePath() + "]");
             }
         }
-
-        // 返回创建的目录文件对象
-        return file;
+        return dir;
     }
-
 }
