@@ -4,7 +4,7 @@
 
   <groupId>io.github.lxwise</groupId>
   <artifactId>jfx-maven-plugin</artifactId>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
   <packaging>maven-plugin</packaging>
   <description>JavaFX full platform (windows, Mac, Linux) one-click package executable files (app-image, exe, msi, rpm, deb, pkg, dmg) maven plugin. Support modular, non-modular and pre-built runtime image packaging modes with automatic JRE slimming via jlink/jdeps.</description>
   <name>jfx-maven-plugin</name>
@@ -118,7 +118,6 @@
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>lxwise</publishingServerId>
-          <tokenAuth>true</tokenAuth>
         </configuration>
       </plugin>
       <!--   source源码插件 -->
@@ -160,9 +159,8 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
-        <version>1.6</version>
+        <version>3.2.8</version>
         <configuration>
-          <executable>D:\develop\GnuPG\bin\gpg.exe</executable>
           <keyname>lxwise</keyname>
         </configuration>
         <executions>

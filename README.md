@@ -17,7 +17,7 @@ jfx-maven-plugin 是一个 JavaFX 打包插件，提供了一体化方案来解�
       <img src="https://img.shields.io/hexpm/l/plug.svg"/>
       <img src="https://img.shields.io/badge/build-maven-green"/>
       <img src="https://img.shields.io/badge/java-21%2B-%23F27E3F"/>
-      <img src="https://img.shields.io/badge/maven_central-v1.1.0-blue"/>
+      <img src="https://img.shields.io/badge/maven_central-v1.1.1-blue"/>
    </a>
 </p>
 
@@ -87,7 +87,7 @@ dotnet tool update --global wix
         <plugin>
             <groupId>io.github.lxwise</groupId>
             <artifactId>jfx-maven-plugin</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.1</version>
             <configuration>
                 <mainClass>com.example.MainApp</mainClass>
             </configuration>
@@ -158,7 +158,7 @@ mvn jfx:jdeps
         <plugin>
             <groupId>io.github.lxwise</groupId>
             <artifactId>jfx-maven-plugin</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.1</version>
             <configuration>
                 <imagePath>${project.build.directory}/image</imagePath>
                 <name>jfx-test</name>
@@ -177,11 +177,11 @@ mvn jfx:jdeps
         <plugin>
             <groupId>io.github.lxwise</groupId>
             <artifactId>jfx-maven-plugin</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.1</version>
             <configuration>
                 <name>jfx-test</name>
                 <mainClass>com.lxwise.plugin.AppStart</mainClass>
-                <appVersion>1.1.0</appVersion>
+                <appVersion>1.1.1</appVersion>
                 <vendor>lxwise</vendor>
                 <copyright>版权@lxwise</copyright>
                 <description>jfx-test的测试描述信息</description>
@@ -227,7 +227,7 @@ mvn jfx:jdeps
         <plugin>
             <groupId>io.github.lxwise</groupId>
             <artifactId>jfx-maven-plugin</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.1</version>
             <configuration>
                 <mainClass>com.example.MainApp</mainClass>
                 <vendor>MyCompany</vendor>
@@ -256,7 +256,7 @@ mvn jfx:jdeps
 <plugin>
     <groupId>io.github.lxwise</groupId>
     <artifactId>jfx-maven-plugin</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
     <configuration>
         <!-- ===== 核心配置（必填） ===== -->
         <mainClass>com.example.MainApp</mainClass>

@@ -189,7 +189,7 @@ public class JPackageMojo extends AbstractMojo {
     @Parameter(defaultValue = "false")
     private Boolean macAppStore;
 
-    /** macOS 权利文件路径（.entitlements 文件） */
+    /** macOS 权利文件路径（entitlements 文件） */
     @Parameter(defaultValue = "")
     private String macEntitlements;
 
@@ -666,14 +666,14 @@ public class JPackageMojo extends AbstractMojo {
             command.add("--win-dir-chooser");
         }
         addOptionIfPresent(command, "--win-help-url", winHelpUrl);
-        if (Boolean.TRUE.equals(winMenu)) {
+        if (Boolean.TRUE.equals(winMenu) && !isAppImage()) {
             command.add("--win-menu");
         }
         addOptionIfPresent(command, "--win-menu-group", winMenuGroup);
-        if (Boolean.TRUE.equals(winPerUserInstall)) {
+        if (Boolean.TRUE.equals(winPerUserInstall) && !isAppImage()) {
             command.add("--win-per-user-install");
         }
-        if (Boolean.TRUE.equals(winShortcut)) {
+        if (Boolean.TRUE.equals(winShortcut) && !isAppImage()) {
             command.add("--win-shortcut");
         }
         if (Boolean.TRUE.equals(winShortcutPrompt) && !isAppImage()) {
@@ -702,7 +702,7 @@ public class JPackageMojo extends AbstractMojo {
         if (Boolean.TRUE.equals(macAppStore)) {
             command.add("--mac-app-store");
         }
-        addFileOption(command, "--mac-entitlements", macEntitlements, "mac-entitlements 文件不存在");
+        addFileOption(command, "--mac-entitlements", macEntitlements, "mac-entitlements 文件不存在: ");
         addOptionIfPresent(command, "--mac-app-category", macAppCategory);
     }
 
@@ -834,7 +834,8 @@ public class JPackageMojo extends AbstractMojo {
         getLog().info("正在复制文件: [" + finalName + "] 至 [" + target.getAbsolutePath() + "]");
         FileUtils.copy(source, target);
 
-        this.mainJar = target.getAbsolutePath();
+        // jpackage 要求 --main-jar 使用相对于 --input 目录的路径（不能使用绝对路径）
+        this.mainJar = target.getName();
     }
 
     /**
